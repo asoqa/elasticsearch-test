@@ -1,4 +1,4 @@
 elasticsearch-test
 ==================
 
-for test
+elasticsearch functional testcases & performance testcases
