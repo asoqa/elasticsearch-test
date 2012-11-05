@@ -271,5 +271,101 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		$expected = '{"error":"VersionConflictEngineException[[test][1] [index][5]: version conflict, current [2], provided [1]]","status":409}';
 		$this->assertEquals($expected, $result, $expected . " || " . $result);		
 	}	
+	
+	/**
+	 * 说明：
+	 * 	通过op_type参数强制创建索引，行为是put-if-absent，如果id相同会失败，这里先测试成功的情况
+	 * 前提：
+	 * 	建立好map，如setUpBeforeClass所示
+	 * 判断：
+	 * 	1.	返回json索引
+	 */	
+	public function testIndexOperationType() {
+		$method = "PUT";
+		$id = 6;
+		$url = "http://10.232.42.205/test/index/" . $id . "?op_type=create" ;
+		self::$ch = curl_init($url);
+		
+		$index = '{
+		    "message" : "trying out Elastic Search"
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"ok":true,"_index":"test","_type":"index","_id":"6","_version":1}';
+		$this->assertEquals($expected, $result, $expected . " || " . $result);		
+	}
+	
+	/**
+	 * 说明：
+	 * 	通过_create强制创建索引，行为是put-if-absent，如果id相同会失败，这里测试失败的情况
+	 * 前提：
+	 * 	建立好map，如setUpBeforeClass所示
+	 * 判断：
+	 * 	1.	产生冲突，http 409错误
+	 */	
+	public function testIndexCreationFail() {
+		$method = "PUT";
+		$id = 7;
+		$url = "http://10.232.42.205/test/index/" . $id . "/_create" ;
+		self::$ch = curl_init($url);
+	
+		$index = '{
+		    "message" : "trying out Elastic Search"
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+	
+		curl_exec(self::$ch);
+		
+		//制造冲突
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"error":"DocumentAlreadyExistsException[[test][3] [index][7]: document already exists]","status":409}';
+		$this->assertEquals($expected, $result, $expected . " || " . $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	没有指定id，则自动生成id
+	 * 前提：
+	 * 	建立好map，如setUpBeforeClass所示
+	 * 判断：
+	 * 	1.	返回json索引，这里只简单通过正则表达式判断了id有值，并未判断id正确性(缺乏id生成的算法)
+	 */	
+	public function testIndexWithoutId() {
+		$method = "POST";
+		$url = "http://10.232.42.205/test/index" ;
+		self::$ch = curl_init($url);
+		
+		$index = '{
+		    "message" : "trying out Elastic Search, Without Id"
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"ok":true,"_index":"test","_type":"index","_id":"\w+","_version":1}';
+		$this->AssertRegExp($expected, $result, $expected . " || " . $result);		
+	}
+	
+	public function testRouting() {
+		
+	}
 }
 
