@@ -6,7 +6,7 @@ require_once 'PHPUnit\Framework\TestCase.php';
  * elasticsearch.org:
  * 	http://www.elasticsearch.org/guide/reference/api/index_.html
  * 说明:
- *   调用es restapi建立索引
+ *   调用es restapi建立索引的各种方式，没有对索引内容正确性进行完整断言
  * @author 	can.zhaoc
  * 
  */
@@ -63,6 +63,10 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
 		$result = curl_exec(self::$ch);		
+		
+		$url = "http://10.232.42.205/test/index-child";
+		curl_setopt(self::$ch, CURLOPT_URL, $url);		
+		$result = curl_exec(self::$ch);
 	}
 	
 	/**
@@ -138,13 +142,6 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		$expected = '{"ok":true,"_index":"test","_type":"index","_id":"2","_version":1}';
 		$this->assertEquals($expected, $result, $expected . " || " . $result);
 	}	
-	
-	/**
-	 * Automatic index creation can be disabled by setting action.auto_create_index to false in the config file of all nodes. Automatic mapping creation can be disabled by setting index.mapper.dynamic to false in the config files of all nodes (or on the specific index settings).
-	 */
-	public function testIndexAutomatically() {
-		
-	}
 	
 	
 	/**
@@ -360,12 +357,108 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		
 		$result = curl_exec(self::$ch);
 		
-		$expected = '{"ok":true,"_index":"test","_type":"index","_id":"\w+","_version":1}';
+		$expected = '{"ok":true,"_index":"test","_type":"index","_id":"[\w\-]{22}","_version":1}';
 		$this->AssertRegExp($expected, $result, $expected . " || " . $result);		
 	}
 	
+	/**
+	 * 说明：
+	 * 	routing方式建立索引
+	 * 前提：
+	 * 	建立好map，如setUpBeforeClass所示
+	 * 判断：
+	 * 	1.	返回json索引，routing方式的建立有点疑问，参见http://elasticsearch-users.115913.n3.nabble.com/problem-using-routing-index-search-td4024816.html
+	 */	
 	public function testRouting() {
+		$method = "POST";
+		$url = "http://10.232.42.205/test/index?routing=test_routing" ;
+		self::$ch = curl_init($url);
 		
+		$index = '{
+			"user" : "test_routing",
+		    "message" : "trying out Elastic Search, routing"
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"ok":true,"_index":"test","_type":"index","_id":"[\w\-]{22}","_version":1}';
+		$this->AssertRegExp($expected, $result, $expected . " || " . $result);	
+		$this->assertFalse(false, "没有验证routing正确性");	
+	}
+	
+	public function testParentChild() {
+		//建立parent索引
+		$method = "PUT";
+		$parent_id = 8;
+		$url = "http://10.232.42.205/test/index/" . $parent_id ;
+		self::$ch = curl_init($url);
+		
+		$index = '{
+			"user" : "parent",
+		    "message" : "some good news"
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		
+		$result = curl_exec(self::$ch);		
+		
+		//建立parent-child关系
+		$method = "PUT";
+		$url = "http://10.232.42.205/test/index-child/_mapping" ;
+		$index = '{
+			"index-child" : {"_parent" : {"type" : "index"}}
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		$result = curl_exec(self::$ch);		
+		
+		//建立child索引
+		$method = "PUT";
+		$child_id = 1;
+		$url = "http://10.232.42.205/test/index-child/" . $child_id . "?parent=" . $parent_id ;
+		$index = '{
+			"user" : "child",
+			"comment" : "child comments"
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		$result = curl_exec(self::$ch);		
+		$expected = '{"ok":true,"_index":"test","_type":"index-child","_id":"1","_version":1}';
+		//$this->assertEquals($expected, $result, $expected . " || " . $result);
+		
+		sleep(1);
+		
+		//查询child索引
+		$method = "XGET";
+		$url = "http://10.232.42.205/test/_search";
+		$query = '{ 
+		    "query" : { 
+		        "has_child" : {
+		            "type" : "index-child", 
+		            "query" :{"term" : {"user" : "child"} }
+		        }
+		    }
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);	
+		
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"8","_score":1.0, "_source" : {
+			"user" : "parent",
+		    "message" : "some good news"
+		}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);	
 	}
 }
 
