@@ -533,7 +533,7 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		$this->assertEquals($expected, $result, $expected . " || " . $result);	
 		
 		//过ttl时间后校验
-		sleep(6);
+		sleep(7);
 		$method = "XGET";
 		$url = "http://10.232.42.205/test/index/" . $id;
 		curl_setopt(self::$ch, CURLOPT_URL, $url);
@@ -583,6 +583,36 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 	 */
 	public function testRefresh() {
 		
+	}
+	
+	/**
+	 * 说明：
+	 * 	索引在写入时，主分片不一定处于可用状态。比如主分片正在从gateway或备份中恢复。
+	 * 	默认情况下索引写入时会有个1分钟的超时时间，等待主分片可用。超时时间可以通过timeout参数配置。
+	 * 前提：
+	 * 判断：
+	 * 	1.	返回json索引，5分钟超时时间（这里不方便验证，掠过）
+	 */
+	public function testTimeout() {
+		$method = "PUT";
+		$id = 11;
+		$url = "http://10.232.42.205/test/index/" . $id . "?timeout=5m";
+		self::$ch = curl_init($url);
+		
+		$index = '{
+		    "message" : "trying timeout"
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"ok":true,"_index":"test","_type":"index","_id":"'. $id . '","_version":1}';
+		$this->assertEquals($expected, $result, $expected . " || " . $result);		
 	}
 }
 
