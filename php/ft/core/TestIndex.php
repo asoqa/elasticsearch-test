@@ -22,7 +22,9 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		    "index" : {
 		        "properties" : {
 		            "message" : {"type" : "string", "store" : "yes"}
-		        }
+		        },
+				"_timestamp" : { "enabled" : true },
+				"_ttl" : { "enabled" : true }					
 		    }
 		}';
 		
@@ -392,6 +394,14 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		$this->assertFalse(false, "没有验证routing正确性");	
 	}
 	
+	/**
+	 * 说明：
+	 * 	建立parent-child关联索引，据说parent-child比较占内存
+	 * 前提：
+	 * 	建立好map，如setUpBeforeClass所示
+	 * 判断：
+	 * 	1.	返回json索引，这里通过query对结果正确性进行了完整断言
+	 */	
 	public function testParentChild() {
 		//建立parent索引
 		$method = "PUT";
@@ -436,6 +446,7 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		$expected = '{"ok":true,"_index":"test","_type":"index-child","_id":"1","_version":1}';
 		//$this->assertEquals($expected, $result, $expected . " || " . $result);
 		
+		//不然下面的查询会拿不到结果
 		sleep(1);
 		
 		//查询child索引
@@ -459,6 +470,119 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		    "message" : "some good news"
 		}}\]}}';
 		$this->AssertRegExp($expected, $result, $result);	
+	}
+	
+	/**
+	 * 说明：
+	 * 	给索引打时间戳
+	 * 前提：
+	 * 	建立好map，如setUpBeforeClass所示
+	 * 判断：
+	 * 	1.	返回json索引，时间戳如何使用还不清楚
+	 */	
+	public function testTimestamp() {
+		$method = "PUT";
+		$id = 9;
+		$url = "http://10.232.42.205/test/index/" . $id . "?timestamp=2012-11-11T14%3A12%3A12";
+		self::$ch = curl_init($url);
+		
+		$index = '{
+		    "message" : "trying timestamp"
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"ok":true,"_index":"test","_type":"index","_id":"'. $id . '","_version":1}';
+		$this->assertEquals($expected, $result, $expected . " || " . $result);		
+	}
+	
+	/**
+	 * 说明：
+	 * 	ttl到期先打上删除标记，等indices.ttl.interval到之后合并做真正的删除
+	 * 前提：
+	 * 	1. 建立好map，启用ttl和timestamp配置，如setUpBeforeClass所示
+	 *  2. 设置集群indices.ttl.interval=1，这样能够迅速确认ttl失效
+	 * 判断：
+	 * 	1.	返回json索引，indices.ttl.interval到之后应该查询不到
+	 */	
+	public function testTTL() {
+		$method = "PUT";
+		$id = 10;
+		$url = "http://10.232.42.205/test/index/" . $id . "?ttl=5000";
+		self::$ch = curl_init($url);
+		
+		$index = '{
+		    "message" : "trying ttl"
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"ok":true,"_index":"test","_type":"index","_id":"'. $id . '","_version":1}';
+		$this->assertEquals($expected, $result, $expected . " || " . $result);	
+		
+		//过ttl时间后校验
+		sleep(6);
+		$method = "XGET";
+		$url = "http://10.232.42.205/test/index/" . $id;
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		$result = curl_exec(self::$ch);		
+		$expected = '{"_index":"test","_type":"index","_id":"'. $id . '","exists":false}';
+		$this->assertEquals($expected, $result, $expected . " || " . $result);
+	}
+	
+	/**
+	 * percolate功能可以过滤特定查询条件
+	 * 比如先定义一个查询key为kuku，实际内容查询field1=value1的查询条件
+	 * 这样当有符合field1=value1的query产生时，都会匹配到kuku这条记录
+	 */
+	public function testPercolate() {
+		//这个用例放在percolate模块单独测试
+	}
+	
+	/**
+	 * 索引先直接写主分片，这个操作发生在包含此分片的实际节点上。主分片完成操作后，根据需要，将更新分布到可用备份中。
+	 */
+	public function testDistribute() {
+		
+	}
+	
+	/**
+	 *  为了防止写操作发生在坏的分区上。默认情况下，索引操作仅在活动分片数量>标准（副本数量/2+1）的情况下进行。
+	 *  通过 action.write_consistency配置可以定制这个默认行为。可用的值有one,quorum,all
+	 */
+	public function testWriteConsistency() {
+		
+	}
+	
+	/**
+	 * 异步备份
+	 * 默认情况下，索引操作在所有分片（包括备份中的）都完成之后才返回（同步备份）。为了启用异步备份，使得备份过程
+	 * 在后台进行，可以将replication参数设为async。当异步备份使用时，索引操作在主分片完成后立即返回。
+	 */
+	public function testAsynchronousReplication() {
+		
+	}
+	
+	/**
+	 * 通过设置refresh参数为true，可以使得索引立刻更新，这样在搜索结果中能够立刻体现。
+	 * 需要谨慎使用这个功能，因为可能会导致性能的降低，包括索引和搜索过程，这个过程是完全实时的。
+	 * 
+	 */
+	public function testRefresh() {
+		
 	}
 }
 
