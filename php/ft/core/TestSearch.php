@@ -191,6 +191,8 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 	/**
 	 * 说明：
 	 * 	Match查询支持text/numerics/dates类型,可以指定 operator为and或者or
+	 *  match一套查询不走"query parsing"流程，因此不支持field name前缀匹配、wildcard通配符以及其他高级特性；
+	 *  所以match查询失败的几率非常小（几乎不存在），并且与真实的查询行为（搜索框的查询）非常一致
 	 *  不是特别理解match查询的作用
 	 * 前提：
 	 * 	建立索引
@@ -223,12 +225,11 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 	
 	/**
 	 * 说明：
-	 * 	Match查询支持text/numerics/dates类型
-	 *  不是特别理解match查询的作用
+	 * 	match支持phrase词组查询，默认slop=0（slop为词组匹配时的移动次数），也就是精确匹配
 	 * 前提：
 	 * 	建立索引
 	 * 判断：
-	 * 	1.
+	 * 	1.返回一条匹配记录
 	 */
 	public function testMatchPhrase() {
 		$method = "GET";
@@ -236,10 +237,9 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 	
 		$query = '{
 		    "query" : {
-				"match" : {
-				        "message" : "trying out Elastic Search1",
-						"operator" : "and"
-				    }
+			    "match_phrase" : {
+			        "message" : "Elastic Search1"
+			    }
 		    }
 		}';
 	
@@ -250,7 +250,47 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
 		$result = curl_exec(self::$ch);
 	
-		$expected = file_get_contents(__DIR__ . "\\TestSearch_testMatchQuery.json");
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.79726744,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.79726744, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	match支持phrase词组前缀，基本和phrase查询一样，但是可以允许最后一个term按前缀匹配
+	 * 通过 "max_expansions" : 10类似的可以控制匹配前缀的长度，提升匹配效率
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回一条匹配记录
+	 */
+	public function testMatchPhrasePrefix() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+		    "query" : {
+			    "match_phrase_prefix" : {
+			        "message" : "trying out Elastic Search2"
+			    }
+		    }
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":1.3918023,"hits":\[{"_index":"test","_type":"index","_id":"2","_score":1.3918023, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}}\]}}';
 		$this->AssertRegExp($expected, $result, $result);
 	}	
 }
