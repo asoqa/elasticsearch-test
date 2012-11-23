@@ -1,0 +1,41 @@
+{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":10,"max_score":0.7177073,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.7177073, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}},{"_index":"test","_type":"index","_id":"6","_score":0.2770319, "_source" : {
+				"user" : "kimchy6",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search6" 
+			}},{"_index":"test","_type":"index","_id":"3","_score":0.23448017, "_source" : {
+				"user" : "kimchy3",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search3" 
+			}},{"_index":"test","_type":"index","_id":"8","_score":0.23448017, "_source" : {
+				"user" : "kimchy8",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search8" 
+			}},{"_index":"test","_type":"index","_id":"10","_score":0.23448017, "_source" : {
+				"user" : "kimchy10",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search10" 
+			}},{"_index":"test","_type":"index","_id":"4","_score":0.20066321, "_source" : {
+				"user" : "kimchy4",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search4" 
+			}},{"_index":"test","_type":"index","_id":"9","_score":0.20066321, "_source" : {
+				"user" : "kimchy9",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search9" 
+			}},{"_index":"test","_type":"index","_id":"2","_score":0.20066321, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}},{"_index":"test","_type":"index","_id":"7","_score":0.20066321, "_source" : {
+				"user" : "kimchy7",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search7" 
+			}},{"_index":"test","_type":"index","_id":"5","_score":0.093538016, "_source" : {
+				"user" : "kimchy5",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search5" 
+			}}\]}}

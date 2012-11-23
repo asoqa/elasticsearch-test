@@ -124,8 +124,44 @@ class TestGet extends PHPUnit_Framework_TestCase {
 		$this->assertEquals($expected, $result, $result);		
 	}
 	
-	public function testXHEAD() {
+	/**
+	 * XHEAD
+	 * 如果存在返回的head中包含200，否则是404
+	 * curl -XGET 'http://localhost:9200/twitter/_status'可以获取更详细的信息
+	 */
+	public function testXHEADExist() {
+		$method = "HEAD";
+		$url = "http://10.232.42.205/test/index/" . self::$id;
 		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_HEADER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		$result = curl_exec(self::$ch);
+		
+		$expected = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Length: 0\r\n\r\n";
+		$this->assertEquals($expected, $result, $result);		
+	}
+	
+	/**
+	 * XHEAD
+	 * 如果存在返回的head中包含200，否则是404
+	 * curl -XGET 'http://localhost:9200/twitter/_status'可以获取更详细的信息
+	 */
+	public function testXHEADNotExist() {
+		$method = "HEAD";
+		$url = "http://10.232.42.205/test/index/" . (self::$id+1);
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_HEADER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		$result = curl_exec(self::$ch);
+	
+		$expected = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Length: 0\r\n\r\n";
+		$this->assertEquals($expected, $result, $result);
 	}
 	
 	/**
@@ -164,7 +200,7 @@ class TestGet extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		$result = curl_exec(self::$ch);
 		
-		$expected = '{"_index":"test","_type":"index","_id":"4","_version":1,"exists":true,"fields":{"message":"trying out Elastic Search"}}';
+		$expected = '{"_index":"test","_type":"index","_id":"' . self::$id  .'","_version":1,"exists":true,"fields":{"message":"trying out Elastic Search"}}';
 		$this->assertEquals($expected, $result, $result);		
 	}
 	
