@@ -76,11 +76,11 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		$result = curl_exec(self::$ch);		
+		//$result = curl_exec(self::$ch);		
 		
 		$url = "http://10.232.42.205/test/index-child";
 		curl_setopt(self::$ch, CURLOPT_URL, $url);		
-		$result = curl_exec(self::$ch);
+		//$result = curl_exec(self::$ch);
 	}
 	
 	/**
@@ -291,6 +291,359 @@ class TestSearch extends PHPUnit_Framework_TestCase {
  				"postDate" : "2009-11-15T14:12:12",						
 			    "message" : "trying out Elastic Search2" 
 			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	multi_match支持多字段查询，可以是bool或dis_max查询。这里在user和message查询含有kimchy1的索引
+	 * 除了match支持的参数外，还支持三个参数：
+	 * fields:查询字段
+	 * use_dis_max:boolean值，是dis_max查询还是bool查询。默认为true，即dis_max查询
+	 * tie_breaker:不懂...，貌似是平衡不同字段之间分值的设置
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回一条匹配记录
+	 */	
+	public function testMultiMatch() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+		
+		$query = '{
+		    "query" : {
+			  "multi_match" : {
+			    "query" : "kimchy1",
+			    "fields" : [ "user", "message" ]
+			  }
+			}
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.5906161,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.5906161, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);			
+	}
+	
+	/**
+	 * 说明：
+	 * 	Bool查询对其他查询结果进行boolean组合。类似与lucene的BooleanQuery。使用一个或多个boolean clause
+	 	must：clause必须包含在内
+	 	should：clause至少一个被包含在内，通过minimum_number_should_match参数设置最小clause匹配数
+	 	must_not: clause不能包含在内
+	 *  Bool查询也支持disable_coord参数（默认false），评分机制
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回一条匹配记录
+	 */
+	public function testBoolQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+		
+		$query = '{
+		    "query" : {
+			    "bool" : {
+			        "must" : {
+			            "term" : { "user" : "kimchy2" }
+			        },
+			        "must_not" : {
+			            "range" : {
+			                "postDate" : { "from" : "2009-11-15T14:12:10", "to" : "2009-11-15T14:12:11" }
+			            }
+			        },
+			        "minimum_number_should_match" : 1,
+			        "boost" : 1.0
+			    }
+			}
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"2","_score":1.0, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);		
+	}	
+
+	/**
+	 * 说明：
+	 * 	boosting查询用于对结果进行降权，对降权的细节算法不太明白
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回一条匹配记录
+	 */
+	public function testBoostingQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query" : 
+			{
+				"boosting" : {
+					"positive" : {
+						"term" : {
+							"user" : "kimchy2"
+						}
+					},
+					"negative" : {
+						"term" : {
+							"user" : "kimchy2"
+						}
+					},
+					"negative_boost" : 0.2
+				}
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.2,"hits":\[{"_index":"test","_type":"index","_id":"2","_score":0.2, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	ids查询用于根据提供的id进行批量查询
+	 * 前提：
+	 * 	建立索引，不需要_id字段建索引，因为ids是工作在内部_uid字段上
+	 * 判断：
+	 * 	1.返回一条匹配记录
+	 */
+	public function testIdsQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query" : 
+			{
+				"ids" : {
+					"type" : "index",
+					"values" : ["1", "2"]
+				}
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":2,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":1.0, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}},{"_index":"test","_type":"index","_id":"2","_score":1.0, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	custom_score允许自定义评分，可以使用 脚本表达式 来根据文档查询结果中(数值型)的值计算评分，
+	           可以使用_score参数来获取其评分，可以使用params设置脚本参数
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回一条匹配记录
+	 */
+	public function testCustomScoreQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+		  "query": {
+		    "custom_score": {
+		      "script":"_score * param1" ,
+			  "params" : {
+				"param1" : 2
+			  },
+		      "query": {
+				"bool" : {
+					"must" : {
+						"term" : {"user" : "kimchy2" }
+					}
+				}
+		      }
+		    }
+		  },
+		  "size": 1
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":2.0,"hits":\[{"_index":"test","_type":"index","_id":"2","_score":2.0, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	custom_boost_factor允许自定义评分，计算方式为其参数boost_factor乘以原来的评分
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回一条匹配记录
+	 */
+	public function testCustomBoostFactor() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+		  "query": 
+			{
+			    "custom_boost_factor": {
+			        "query" : {
+			            "term" : { "user" : "kimchy2"}
+			        },
+			        "boost_factor": 3.5
+			    }
+			},
+			  "size": 1
+			}
+		';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":3.5,"hits":\[{"_index":"test","_type":"index","_id":"2","_score":3.5, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 没看明白有什么用
+	 */
+	public function testConstantScore() {
+		
+	}
+	
+	/**
+	 * 还在搞清楚中
+	 */
+	public function testDisMaxQuery() {
+		
+	}
+	
+	/**
+	 * 说明：
+	 * 	是query_string的简化版，大部分query_string的参数都可以在这里用
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回一条匹配记录
+	 */	
+	public function testFieldQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+		
+		$query = '{
+			"query":
+			{
+			    "field" : { 
+			        "message" :"+trying -Search2 -Search3 -Search4 -Search5 -Search6 -Search7 -Search8 -Search9 -Search10"
+			    }
+			}
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.2972674,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.2972674, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);		
+	}
+	
+	/**
+	 * 说明：
+	 * 	FilteredQuery，对查询结果进行过滤，这里两层过滤后应该搜不出任何结果
+	 *  filter对象只能是filter的元素，不能是查询语句。filter与查询相比更快（尤其在cache的时候），因为省去了评分的过程
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回0条匹配记录
+	 */
+	public function testFilterQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query":
+			{
+			    "filtered" : {
+			        "query" : {
+			            "term" : { "message" : "trying" }
+			        },
+			        "filter" : {
+			            "range" : {
+			                "postDate" : { "from" : "2009-11-15T14:12:10", "to" : "2009-11-15T14:12:11" }
+			            }
+			        }
+			    }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":0,"max_score":null,"hits":\[\]}}';
 		$this->AssertRegExp($expected, $result, $result);
 	}	
 }
