@@ -76,11 +76,11 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		//$result = curl_exec(self::$ch);		
+		$result = curl_exec(self::$ch);		
 		
 		$url = "http://10.232.42.205/test/index-child";
 		curl_setopt(self::$ch, CURLOPT_URL, $url);		
-		//$result = curl_exec(self::$ch);
+		$result = curl_exec(self::$ch);
 	}
 	
 	/**
@@ -127,7 +127,7 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
 		$result = curl_exec(self::$ch);
 		
-		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":1.0, "_source" : {
+		$expected = '{"took":[\d]{1,3},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":1.0, "_source" : {
 				"user" : "kimchy1",
  				"postDate" : "2009-11-15T14:12:12",						
 			    "message" : "trying out Elastic Search1" 
@@ -645,6 +645,105 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 	
 		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":0,"max_score":null,"hits":\[\]}}';
 		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	Fuzzy Like this可以在一个或多个字段中进行like查询，可以缩写为flt，支持的参数有：
+	    fields:
+	    like_text:
+	    ignore_tf:
+	    max_query_terms:
+	    min_similarity:
+	    prefix_length:
+	    boost:
+	    analyzer:
+	 *  对所有term进行查询，挑出最好的n个不同term的结果.FuzzyQuery和MoreLikethis的混合体，不过需要额外考虑 一些模糊评分因子。
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回0条匹配记录
+	 */
+	public function testFuzzyLikeThis() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query":
+			{
+			    "fuzzy_like_this" : {
+			        "fields" : ["user", "message"],
+			        "like_text" : "kimchy1",
+			        "max_query_terms" : 10,
+			        "prefix_length" : 7
+			    }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,3},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":2,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":1.0, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}},{"_index":"test","_type":"index","_id":"10","_score":1.0, "_source" : {
+				"user" : "kimchy10",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search10" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 在child索引中查找符合query的文档，返回其对应的parent文档。
+	 * 同has_child filter的用法，参考TestIndex.php的testParentChild测试用例。注意type是child的type。
+	 * 这个查询比较耗内存，因为会把所有_id取出来，放在内存里
+	 */
+	public function testHasChildQuery() {
+		
+	}
+	
+	/**
+	 * 在parent索引中查找符合query的文档，返回其对应的child文档
+	 * 用法同has_parent_filter，在0.19.10后版本可用，具体用例同testHasChildQuery。
+	 */
+	public function testHasParentQuery() {
+		
+	}
+	
+	/**
+	 * 说明：
+	 * 	同lucene的MatchAllQuery，取出所有文档， 默认boost值都是1.0
+	 *  可以通过"match_all" : { "norms_field" : "my_field" }，使得index boost生效。不过貌似没什么用，不太清楚
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回所有匹配记录
+	 */
+	public function testMatchAllQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{ 
+		    "query" : { 
+			    "match_all" : { }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = file_get_contents(__DIR__ . "\\TestSearch_testMatchAllQuery.json");
+		$this->AssertRegExp($expected, $result, $result);	
 	}	
 }
 
