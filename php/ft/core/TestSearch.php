@@ -1024,7 +1024,7 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 	 * 前提：
 	 * 	建立索引
 	 * 判断：
-	 * 	1.返回0匹配记录
+	 * 	1.返回匹配记录
 	 */
 	public function testSpanFirstQuery() {
 		$method = "GET";
@@ -1039,6 +1039,184 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 			        },
 			        "end" : "1"
 			    }
+			}   
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.70710677,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.70710677, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	SpanNearQuery, 类似于phrase query，对词组按slop位移进行整体匹配。但是SpanNearQuery可以单独设置词条的顺序，因为记录下了位置，所以可以正着查，可以反着查
+	          比如trying和search2，在slop为2的情况下，可以在两个单词之间允许存在1或2个其他单词
+	    spannearquery能够查到该记录。
+	    
+	    slop参数用来控制不匹配的位置数量
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回匹配记录
+	 */
+	public function testSpanNearQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query": 
+			{ 
+			    "span_near" : { 
+			        "clauses" : [ 
+			            { "span_term" : { "message": "trying" } }, 
+			            { "span_term" : { "message" : "search2" } }
+			        ], 
+			        "slop" : 2, 
+			        "in_order" : true, 
+			        "collect_payloads" : false 
+			    } 
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.35654885,"hits":\[{"_index":"test","_type":"index","_id":"2","_score":0.35654885, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	Span_not查询。
+	          在include的词组跨度中排除exclude的词组，并非从在include的查询结果中排除exclude的查询结果，切记切记。
+	          比如这里include中span_near的trying和search2查询跨度为2（中间隔了out和elastic两个term），结果有1条匹配
+	           exclude中
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回匹配记录
+	 */
+	public function testSpanNotQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query":
+			{
+			    "span_not" : {
+			        "include" : {
+			        "span_near" : { 
+			        "clauses" : [ 
+			            { "span_term" : { "message": "trying" } }, 
+			            { "span_term" : { "message" : "search2" } }
+			        ], 
+			        "slop" : 2, 
+			        "in_order" : true, 
+			        "collect_payloads" : false 
+			    } 
+			        },
+			        "exclude" : {
+			            "span_term" : { "message" : "search3" }
+			        }
+			    }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.35654885,"hits":\[{"_index":"test","_type":"index","_id":"2","_score":0.35654885, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);		
+	}	
+	
+	/**
+	 * 说明：
+	 * 	SpanOrQuery很简单，就是两个查询子句的并集。
+	  
+	 slop参数用来控制不匹配的位置数量
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回匹配记录
+	 */
+	public function testSpanOrQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query":
+			{
+			    "span_or" : {
+			        "clauses" : [
+			            { "span_term" : { "message" : "search2"} },
+			            { "span_term" : { "message" : "search3"} }
+			        ]
+			    }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":2,"max_score":1.2388785,"hits":\[{"_index":"test","_type":"index","_id":"3","_score":1.2388785, "_source" : {
+				"user" : "kimchy3",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search3" 
+			}},{"_index":"test","_type":"index","_id":"2","_score":0.9521713, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	SpanTermQuery根据term查询，是其他span查询的基础。功能与TermQuery类似，但是会额外记录下term
+	  	在每个文档出现的位置
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回匹配记录
+	 */
+	public function testSpanTermQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query":
+			{
+			    "span_term" : { "user" : "kimchy1" }
 			}   
 		}';
 	
