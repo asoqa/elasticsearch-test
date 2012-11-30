@@ -76,11 +76,11 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		$result = curl_exec(self::$ch);		
+		//$result = curl_exec(self::$ch);		
 		
 		$url = "http://10.232.42.205/test/index-child";
 		curl_setopt(self::$ch, CURLOPT_URL, $url);		
-		$result = curl_exec(self::$ch);
+		//$result = curl_exec(self::$ch);
 	}
 	
 	/**
@@ -744,6 +744,317 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 	
 		$expected = file_get_contents(__DIR__ . "\\TestSearch_testMatchAllQuery.json");
 		$this->AssertRegExp($expected, $result, $result);	
+	}	
+	
+	/**
+	 * 说明：
+	 * 	more like this查询空可以在多个字段中查找相似记录，可以缩写成mlt。支持参数：
+	    fields:
+	    like_text:
+	    percent_terms_to_match:
+	    min_term_freq:
+	    max_query_terms:
+	    stop_words:
+	    min_doc_freq:
+	    max_doc_freq:
+	    min_word_len:
+	    max_word_len:
+	    boost_terms:
+	    boost:
+	    analyzer:
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回所有匹配记录
+	 */
+	public function testMoreLikeThisQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query": 
+			{
+			    "more_like_this" : {
+			        "fields" : ["user"],
+			        "like_text" : "kimchy1",
+			        "min_term_freq" : 1,
+			        "min_doc_freq" : 1, 
+			        "max_query_terms" : 12
+			    }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":1.0, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	和more like this一样，不过是针对单个字段。语法近似于DSL。可以缩写成mlt_field
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回所有匹配记录
+	 */	
+	public function testMoreLikeThisFieldQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query": 
+			{
+			    "more_like_this_field" : {
+			        "user" : {
+			            "like_text" : "kimchy1",
+			            "min_term_freq" : 1,
+			            "min_doc_freq" : 1, 
+			            "max_query_terms" : 12
+			        }
+			    }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":1.0, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	前缀匹配（不进行分词），等同于Lucene的PrefixQuery。可以加boost
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回所有匹配记录
+	 */
+	public function testPrefixQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query": 
+			{
+			    "prefix" : { "user" : "kimchy1" }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":2,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":1.0, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}},{"_index":"test","_type":"index","_id":"10","_score":1.0, "_source" : {
+				"user" : "kimchy10",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search10" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}
+
+	/**
+	 * 说明：
+	 * 	用query parser对查询字符串进行分词，再查询。支持的参数为：
+	    query:
+	    default_field:默认为_all
+	    analyzer:查询字符串的 analyzer
+	    allow_leading_wildcard:
+	    lowercase_expanded_terms:
+	    enable_position_increments:
+	    fuzzy_prefix_length:
+	    fuzzy_min_sim:
+	    phrase_slop:
+	    boost:
+	    analyze_wildcard:
+	    auto_generate_phrase_queries:
+	    minimum_should_match:
+	    lenient:
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回所有匹配记录
+	 */
+	public function testQueryStringQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query": 
+			{
+			    "query_string" : {
+			        "default_field" : "message",
+			        "query" : "trying AND Search1 OR out"
+			    }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.65325016,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.65325016, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}
+
+	/**
+	 * 说明：
+	 * 	多字段查询。组合多字段查询的方式或者是dis_max或者是bool
+	    user^5表示user的boost值设为5
+	    fields字段可以用通配符，比如"fields" : ["city.*"],
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回所有匹配记录
+	 */	
+	public function testQueryStringQueryMultiField() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query": 
+			{
+			    "query_string" : {
+			        "fields" : ["message", "user^5"],
+			        "query" : "trying AND Search1 OR kimchy1",
+			        "use_dis_max" : true
+			    }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.43753055,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.43753055, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	RangeQuery。string类型的字段走TermRangeQuery，数值/日期的字段
+	 *  走NumericRangeQuery。这里用例查询两个日期之间的记录，没有匹配上的。
+	    from:
+	    to:
+	    include_lower:
+	    include_upper:
+	    gt:
+	    gte:
+	    lt:
+	    lte:
+	    boost:
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回0匹配记录
+	 */
+	public function testRangeQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query": 
+				{
+				    "range" : {
+				        "postDate" : { 
+				            "from" : "2009-11-15T14:12:10", 
+				            "to" : "2009-11-15T14:12:11", 
+				            "include_lower" : true, 
+				            "include_upper": false, 
+				            "boost" : 2.0
+				        }
+				    }
+				}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":0,"max_score":null,"hits":\[\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	SpanFirstQuery, 查找方式为从Field的内容起始位置开始，在一个固定的宽度内查找所指定的词条。
+	    end参数用来指定查找宽度。
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回0匹配记录
+	 */
+	public function testSpanFirstQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query": 
+			{
+			    "span_first" : {
+			        "match" : {
+			            "span_term" : { "user": "kimchy1" }
+			        },
+			        "end" : "1"
+			    }
+			}   
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.70710677,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.70710677, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
 	}	
 }
 
