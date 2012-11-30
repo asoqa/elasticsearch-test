@@ -1108,7 +1108,8 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 	 * 	Span_not查询。
 	          在include的词组跨度中排除exclude的词组，并非从在include的查询结果中排除exclude的查询结果，切记切记。
 	          比如这里include中span_near的trying和search2查询跨度为2（中间隔了out和elastic两个term），结果有1条匹配
-	           exclude中
+	           exclude中search2不再include跨度范围的terms(out和elastic)之中，所以不影响结果，仍然是1条匹配
+	          反之，如果exclude中term为out，则在跨度范围内，这部分结果需要被排除，因此没有任何结果匹配
 	 * 前提：
 	 * 	建立索引
 	 * 判断：
