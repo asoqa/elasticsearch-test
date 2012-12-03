@@ -10,7 +10,7 @@ require_once 'PHPUnit\Framework\TestCase.php';
  * @author 	can.zhaoc
  *
  */
-class TestSearch extends PHPUnit_Framework_TestCase {
+class TestSearchQuery extends PHPUnit_Framework_TestCase {
 	
 	public static $ch;
 	
@@ -22,7 +22,7 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 		$map = '{
 		    "index" : {
 		        "properties" : {
-		            "message" : {"type" : "string", "store" : "yes"}
+		            "message" : {"type" : "string", "store" : "yes"},
                     "user" : {"type" : "string", "store" : "no"},
                     "postDate" : {"type" : "date", "store" : "no"}
 		        },
@@ -76,11 +76,15 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		//$result = curl_exec(self::$ch);		
+		$result = curl_exec(self::$ch);		
 		
 		$url = "http://10.232.42.205/test/index-child";
 		curl_setopt(self::$ch, CURLOPT_URL, $url);		
-		//$result = curl_exec(self::$ch);
+		$result = curl_exec(self::$ch);
+		
+		$url = "http://10.232.42.205/test/index-nested";
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		$result = curl_exec(self::$ch);		
 	}
 	
 	/**
@@ -1235,5 +1239,365 @@ class TestSearch extends PHPUnit_Framework_TestCase {
 			}}\]}}';
 		$this->AssertRegExp($expected, $result, $result);
 	}	
+	
+	/**
+	 * 说明：
+	 * 	对被查询的term按字段进行匹配（不分词）
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回匹配记录
+	 */
+	public function testTermQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query":
+			{
+			    "term" : { "user" : { "value" : "kimchy1", "boost" : 2.0 } }
+			} 
+		}  ';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":1.0, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	对被查询的term按字段进行多值匹配（不分词），可以视为bool+should查询的简化版
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回匹配记录
+	 */
+	public function testTermsQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query":
+			{
+			    "terms" : {
+			        "user" : [ "kimchy1", "kimchy2" ],
+			        "minimum_match" : 1
+			    }
+			}
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":2,"max_score":0.25427115,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.25427115, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}},{"_index":"test","_type":"index","_id":"2","_score":0.25427115, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	对child进行查询，会先预估hits大小，然后集成到parent文档中。如果在预估范围中没有足够的parent文档
+	 *  匹配查询请求，将在更大的范围中进行查询。支持参数：
+	    type:
+	    query:
+	    score: max , sum ,avg
+	    factor:默认5，控制第一轮child查询hits大小，hits大小=factor * parent文档数量
+	    incremental_factor:默认2，当第一轮查询没有完全命中parent文档时，需要扩大hit范围=incremental_facotor * 第一轮hits大小
+	    _scope：用于跑facet
+	    top_children查询会load所有id，比较耗内存
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回匹配记录
+	 */
+	public function testTopChildrenQuery() {
+		$parent_id = 8;
+		
+		//建立parent-child关系
+		$method = "PUT";
+		$url = "http://10.232.42.205/test/index-child/_mapping" ;
+		$index = '{
+			"index-child" : {"_parent" : {"type" : "index"}}
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		$result = curl_exec(self::$ch);
+		
+		//建立child索引
+		$method = "PUT";
+		$child_id = 1;
+		$url = "http://10.232.42.205/test/index-child/" . $child_id . "?refresh=true&parent=" . $parent_id ;
+		$index = '{
+			"user" : "child",
+			"comment" : "child comments"
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		$result = curl_exec(self::$ch);
+		$expected = '{"ok":true,"_index":"test","_type":"index-child","_id":"1","_version":1}';
+		
+		//查询child索引
+		$method = "XGET";
+		$url = "http://10.232.42.205/test/_search";
+		$query = '{
+		    "query" : 
+			{ 
+			    "top_children" : { 
+			        "type": "index-child", 
+			        "query" : { 
+			            "term" : { 
+			                "user" : "child" 
+			            } 
+			        }, 
+			        "score" : "max", 
+			        "factor" : 5, 
+			        "incremental_factor" : 2 
+			    } 
+			}
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":1.6931472,"hits":\[{"_index":"test","_type":"index","_id":"8","_score":1.6931472, "_source" : {
+				"user" : "kimchy8",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search8" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);		
+	}
+	
+	/**
+	 * 说明：
+	 * 	wildcard进行模糊查询，可以使用*和?匹配。wildcard查询会很慢，因此建议不要使用*或?开头的模糊查询。
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回匹配记录
+	 */
+	public function testWildcardQuery() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+		    "query" : 
+			{ 
+			    "wildcard" : { "user" : { "value" : "ki*y1", "boost" : 2.0 } } 
+			} 
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":1.0, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}
+
+	/**
+	 * 嵌套查询，支持对object的属性进行单独查询。
+	 * 注意mapping中需要先定义object对应的type为nested类型，否则无法使用nested查询。
+	 */
+	public function testNestedQuery() {
+		$method = "PUT";
+		$url = "http://10.232.42.205/test/index-nested/_mapping" ;
+		$index = '{ 
+		    "index-nested" : { 
+		        "properties" : { 
+		            "obj1" : { 
+		                "type" : "nested" 
+		            } 
+		        } 
+		    } 
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		$result = curl_exec(self::$ch);
+		
+		//建立nested索引
+		$method = "PUT";
+		$url = "http://10.232.42.205/test/index-nested/1?refresh=true";
+		$index = '{ 
+		    "obj1" : [ 
+		        { 
+		            "name" : "blue", 
+		            "count" : 4 
+		        }, 
+		        { 
+		            "name" : "green", 
+		            "count" : 6 
+		        } 
+		    ] 
+		}
+		';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		$result = curl_exec(self::$ch);
+		
+		//查询索引
+		$method = "XGET";
+		$url = "http://10.232.42.205/test/_search";
+		$query = '{
+		    "query" :
+			{ 
+			    "nested" : { 
+			        "path" : "obj1", 
+			        "score_mode" : "avg", 
+			        "query" : { 
+			            "bool" : { 
+			                "must" : [ 
+			                    { 
+			                        "text" : {"obj1.name" : "blue"} 
+			                    }, 
+			                    { 
+			                        "range" : {"obj1.count" : {"gt" : 3}} 
+			                    } 
+			                ] 
+			            } 
+			        } 
+			    } 
+			}
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":2.1615205,"hits":\[{"_index":"test","_type":"index-nested","_id":"1","_score":2.1615205, "_source" : { 
+		    "obj1" : \[ 
+		        { 
+		            "name" : "blue", 
+		            "count" : 4 
+		        }, 
+		        { 
+		            "name" : "green", 
+		            "count" : 6 
+		        } 
+		    \] 
+		}
+		}\]}}';
+		$this->AssertRegExp($expected, $result, $result);		
+	}
+	
+	/**
+	 * 说明：
+	 * 	custom filters score查询语序在查询结果中根据filter进行过滤，同时使用boost或者script来评分。
+	    score_mode：first,min,max,total,avg,multiply
+	          貌似现在的版本不支持params
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回匹配记录
+	 */
+	public function testCustomFiltersScoreQuery() {
+		$method = "PUT";
+		$url = "http://10.232.42.205/test/index-filter/_mapping" ;
+		$index = '{
+		    "index-nested" : {
+		        "properties" : {
+		            "age" : {
+		                "type" : "long"
+		            }
+		        }
+		    }
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+		$result = curl_exec(self::$ch);
+				
+		//批量准备测试数据
+		$method = "PUT";
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		for($i=1; $i<=3; $i++) {
+			$url = "http://10.232.42.205/test/index-filter/" . $i . "?refresh=true";
+		
+			$index = '{
+			    "age" : ' . $i . '
+			}';
+				
+			curl_setopt(self::$ch, CURLOPT_URL, $url);
+			curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
+				
+			$result = curl_exec(self::$ch);
+		}
+				
+		//查询
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index-filter/_search";
+		$query = '{
+		    "query" :
+			{ 
+			    "custom_filters_score" : { 
+			        "query" : { 
+			            "match_all" : {} 
+			        }, 
+			        "filters" : [ 
+			            { 
+			                "filter" : { "range" : { "age": {"from" : 1, "to" : 2} } },
+			                 "script":"2"
+			            },
+			           { 
+			                "filter" : { "range" : { "age": {"from" : 3, "to" : 4} } },
+			                 "boost":"3"
+			            }
+			        ], 
+			        "score_mode" : "first" 
+			    } 
+			}
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":3,"max_score":3.0,"hits":\[{"_index":"test","_type":"index-filter","_id":"3","_score":3.0, "_source" : {
+			    "age" : 3
+			}},{"_index":"test","_type":"index-filter","_id":"1","_score":2.0, "_source" : {
+			    "age" : 1
+			}},{"_index":"test","_type":"index-filter","_id":"2","_score":2.0, "_source" : {
+			    "age" : 2
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	
 }
 
