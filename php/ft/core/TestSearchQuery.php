@@ -1518,7 +1518,7 @@ class TestSearchQuery extends PHPUnit_Framework_TestCase {
 	 * 说明：
 	 * 	custom filters score查询语序在查询结果中根据filter进行过滤，同时使用boost或者script来评分。
 	    score_mode：first,min,max,total,avg,multiply
-	          貌似现在的版本不支持params
+	          貌似现在的版本不支持params，并且range不支持日期类型
 	 * 前提：
 	 * 	建立索引
 	 * 判断：
