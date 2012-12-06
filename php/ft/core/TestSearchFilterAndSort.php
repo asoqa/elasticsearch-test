@@ -10,7 +10,7 @@ require_once 'PHPUnit\Framework\TestCase.php';
  * @author 	can.zhaoc
  *
  */
-class TestSearchFilter extends PHPUnit_Framework_TestCase {
+class TestSearchFilterAndSort extends PHPUnit_Framework_TestCase {
 	
 	public static $ch;
 	
@@ -64,7 +64,6 @@ class TestSearchFilter extends PHPUnit_Framework_TestCase {
 				"user" : "kimchy' . $i . '",
  				"postDate" : "2009-11-15T14:12:12",
 			    "message" : "" ,
-			    "age" : ' . $i . ',
 				"location" : {"lat" : 40.1' . $i . ', "lon" : -71.3' . $i . '}			    		
 			}';		
 		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $index);
@@ -762,7 +761,6 @@ class TestSearchFilter extends PHPUnit_Framework_TestCase {
 				"user" : "kimchy6",
  				"postDate" : "2009-11-15T14:12:12",
 			    "message" : "" ,
-			    "age" : 6,
 				"location" : {"lat" : 40.16, "lon" : -71.36}			    		
 			}}\]}}';
 		$this->AssertRegExp($expected, $result, $result);
@@ -1175,6 +1173,306 @@ class TestSearchFilter extends PHPUnit_Framework_TestCase {
 	}
 	 */	
 	public function testNestedFilter() {
+		
+	}
+	
+	/**
+	 * 说明：
+	          这里测试用例先按postDate升序，再按age逆序，最后按score
+	 * 前提：
+	 *   存在对应索引
+	 * 结果：
+	 *   返回json文档
+	 */	
+	public function testSort() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+		
+		$query = '{
+		    "sort" : [
+		        { "postDate" : {"order" : "asc"} },
+		        { "age" : "desc" },
+		        "_score"
+		    ],
+		    "query" : {
+		        "term" : { "message" : "trying" },
+		        "from" : 0,
+		        "size" : 2
+		    }
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":4,"max_score":null,"hits":\[{"_index":"test","_type":"index","_id":"4","_score":0.15342641, "_source" : {
+				"user" : "kimchy4",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search4" ,
+			    "age" : 4,
+		        "location" : { 
+		            "lat" : 40.14, 
+		            "lon" : -71.34 
+		        }
+			},"sort":\[1258294332000,4,0.15342641\]},{"_index":"test","_type":"index","_id":"3","_score":0.15342641, "_source" : {
+				"user" : "kimchy3",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search3" ,
+			    "age" : 3,
+		        "location" : { 
+		            "lat" : 40.13, 
+		            "lon" : -71.33 
+		        }
+			},"sort":\[1258294332000,3,0.15342641]}\]}}';
+		$this->AssertRegExp($expected, $result, $result);		
+	}
+	
+	/**
+	 * 说明：
+	    对missing field（字段没有值，或为null）的记录进行特殊处理，可以是使用
+	  _first, _last或自定义的值。
+	  这里的case将missing的age字段记录放在一开始（_first）
+	 * 前提：
+	 *   存在对应索引，missing field必须为数值类型
+	 * 结果：
+	 *   返回json文档
+	 */
+	public function testSortMissingField() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+		    "sort" : [
+		        { "age" : {"missing" : "_first"} }
+		    ],
+		    "query" : {
+		        "term" : { "postDate" : "2009-11-15T14:12:12" },
+                                        "from" : 0,
+                                        "size" : 2
+		    }
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":5,"max_score":null,"hits":\[{"_index":"test","_type":"index","_id":"5","_score":null, "_source" : {
+				"user" : "kimchy6",
+ 				"postDate" : "2009-11-15T14:12:12",
+			    "message" : "" ,
+				"location" : {"lat" : 40.16, "lon" : -71.36}			    		
+			},"sort":\[-9223372036854775808\]},{"_index":"test","_type":"index","_id":"1","_score":null, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" ,
+			    "age" : 1,
+		        "location" : { 
+		            "lat" : 40.11, 
+		            "lon" : -71.31 
+		        }
+			},"sort":\[1\]}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+
+	/**
+	 * ignore_unmapped选项可以对没有定义map的字段进行排序
+	  { 
+	    "sort" : [ 
+	        { "price" : {"ignore_unmapped" : true} }, 
+	    ], 
+	    "query" : { 
+	        "term" : { "user" : "kimchy" } 
+	    } 
+	}
+	 */
+	public function testSortIgnoredMapping() {
+	}	
+	
+	/**
+	 * 说明：
+	   对于地理坐标，支持按距离排序，通过_geo_distance配置。这里按离-70,40坐标的距离升序排序。同样坐标点的格式可以是
+	   properties, array, string, geohash
+	 * 前提：
+	 *   必须在mapping中明确指定坐标字段（比如location）类型是geo_point
+	 * 结果：
+	 *   返回区域范围内的坐标文档
+	 */
+	public function testSortGeoDistance() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{ 
+		    "sort" : [ 
+		        { 
+		            "_geo_distance" : { 
+		                "index.location" : [-70, 40], 
+		                "order" : "asc", 
+		                "unit" : "km" 
+		            } 
+		        } 
+		    ], 
+		    "query" : { 
+		        "term" : { "message" : "trying" } ,
+		        "from" : 0,
+		        "size" : 2
+		    } 
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":4,"max_score":null,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":null, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" ,
+			    "age" : 1,
+		        "location" : { 
+		            "lat" : 40.11, 
+		            "lon" : -71.31 
+		        }
+			},"sort":\[112.16405550929582\]},{"_index":"test","_type":"index","_id":"2","_score":null, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" ,
+			    "age" : 2,
+		        "location" : { 
+		            "lat" : 40.12, 
+		            "lon" : -71.32 
+		        }
+			},"sort":\[113.12766476714935]}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}
+		
+	/**
+	 * 说明：
+		用脚本影响sort评分，来达到自定义排序的目的。
+	 * 前提：
+	 *   存在索引
+	 * 结果：
+	 *   返回json索引
+	 */
+	public function testSortScriptBased() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+		    "sort" : { 
+		        "_script" : {  
+		            "script" : "doc[\'age\'].value * factor", 
+		            "type" : "number", 
+		            "params" : { 
+		                "factor" : 1.1 
+		            }, 
+		            "order" : "asc" 
+		        } 
+		    } 
+			,
+		    "query" : {
+		        "term" : { "message" : "trying" },
+		        "from" : 0,
+		        "size" : 2
+		    }
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":4,"max_score":null,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":null, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" ,
+			    "age" : 1,
+		        "location" : { 
+		            "lat" : 40.11, 
+		            "lon" : -71.31 
+		        }
+			},"sort":\[1.1\]},{"_index":"test","_type":"index","_id":"2","_score":null, "_source" : {
+				"user" : "kimchy2",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search2" ,
+			    "age" : 2,
+		        "location" : { 
+		            "lat" : 40.12, 
+		            "lon" : -71.32 
+		        }
+			},"sort":\[2.2\]}]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	    默认情况下，排序时不会计算评分。但通过设置track_scores可以计算评分。
+	 * 前提：
+	 *   存在对应索引
+	 * 结果：
+	 *   返回json文档
+	 */
+	public function testSortTrackingScore() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+    		"track_scores": true, 				
+		    "sort" : [
+		        { "postDate" : {"order" : "asc"} },
+		        { "age" : "desc" },
+		        "_score"
+		    ],
+		    "query" : {
+		        "term" : { "message" : "trying" },
+		        "from" : 0,
+		        "size" : 2
+		    }
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":4,"max_score":0.15342641,"hits":\[{"_index":"test","_type":"index","_id":"4","_score":0.15342641, "_source" : {
+				"user" : "kimchy4",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search4" ,
+			    "age" : 4,
+		        "location" : { 
+		            "lat" : 40.14, 
+		            "lon" : -71.34 
+		        }
+			},"sort":\[1258294332000,4,0.15342641\]},{"_index":"test","_type":"index","_id":"3","_score":0.15342641, "_source" : {
+				"user" : "kimchy3",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search3" ,
+			    "age" : 3,
+		        "location" : { 
+		            "lat" : 40.13, 
+		            "lon" : -71.33 
+		        }
+			},"sort":\[1258294332000,3,0.15342641]}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 排序时，所有相关字段值被加载到内存。这意味着对每个shard，应该有足够的内存来容纳。对string类型的字段，不会进行分词。
+	 * 对数值类型的字段，如果可以，会将类型设置为six_hun类型。
+	 */
+	public function testSortMemoryConsideration() {
 		
 	}
 }
