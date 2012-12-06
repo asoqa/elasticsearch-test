@@ -90,7 +90,7 @@ class TestSearchFilterAndSort extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		//$result = curl_exec(self::$ch);		
+		$result = curl_exec(self::$ch);		
 	}
 	
 	/**

@@ -10,7 +10,7 @@ require_once 'PHPUnit\Framework\TestCase.php';
  * @author 	can.zhaoc
  *
  */
-class TestSearchQuery extends PHPUnit_Framework_TestCase {
+class TestSearchAPI extends PHPUnit_Framework_TestCase {
 	
 	public static $ch;
 	
@@ -81,7 +81,7 @@ class TestSearchQuery extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		//$result = curl_exec(self::$ch);		
+		$result = curl_exec(self::$ch);		
 	}
 	
 	/**

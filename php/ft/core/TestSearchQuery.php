@@ -76,15 +76,15 @@ class TestSearchQuery extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		$result = curl_exec(self::$ch);		
+		//$result = curl_exec(self::$ch);		
 		
 		$url = "http://10.232.42.205/test/index-child";
 		curl_setopt(self::$ch, CURLOPT_URL, $url);		
-		$result = curl_exec(self::$ch);
+		//$result = curl_exec(self::$ch);
 		
 		$url = "http://10.232.42.205/test/index-nested";
 		curl_setopt(self::$ch, CURLOPT_URL, $url);
-		$result = curl_exec(self::$ch);		
+		//$result = curl_exec(self::$ch);		
 	}
 	
 	/**
@@ -702,6 +702,54 @@ class TestSearchQuery extends PHPUnit_Framework_TestCase {
 			}}\]}}';
 		$this->AssertRegExp($expected, $result, $result);
 	}	
+	
+	/**
+	 * 模糊查询在string类型上的应用。基于Levenshitein(edit distance)算法。
+	 {
+        "fuzzy" : { 
+            "user" : {
+                "value" : "ki",
+                "boost" : 1.0,
+                "min_similarity" : 0.5,
+                "prefix_length" : 0
+            }
+        }
+    }
+	 */
+	public function testFuzzyQuery() {
+		
+	}
+	
+	/**
+	 * 模糊查询在数值类型上的应用，下面这个语句查询与12相差2的记录，即price在[0,14]之间的记录。
+	 * 对于数值类型和日期类型，在mapping的时候就可以配置fuzzy_factor参数（默认为1），fuzzy_factor会乘以查询类型中的fuzzy值，比如min_similarity
+	 * {
+	    "fuzzy" : {
+	        "price" : {
+	            "value" : 12,
+	            "min_similarity" : 2
+	        }
+	    }
+	}
+	 */
+	public function testFuzzyNumeiricQuery() {
+		
+	}
+	
+	/**
+	 * 模糊查询在日期类型上的应用，类似于数值类型的模糊查询
+	 * {
+    "fuzzy" : {
+	        "created" : {
+	            "value" : "2010-02-05T12:05:07",
+	            "min_similarity" : "1d"
+	        }
+	    }
+	}
+	 */
+	public function testFuzzyDateQuery() {
+		
+	}
 	
 	/**
 	 * 在child索引中查找符合query的文档，返回其对应的parent文档。
