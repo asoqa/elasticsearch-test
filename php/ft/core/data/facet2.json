@@ -1,0 +1,10 @@
+{
+	"title" : "two" ,					
+	"tags" : ["foo", "bar"],
+	"postDate" : "2009-11-15T14:12:13",						
+	"age" : 3,
+    "obj" : { 
+	    "name" : "blue", 
+	    "count" : 4
+	}
+}

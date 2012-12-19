@@ -81,7 +81,7 @@ class TestSearchAPI extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		$result = curl_exec(self::$ch);		
+		//$result = curl_exec(self::$ch);		
 	}
 	
 	/**
@@ -98,13 +98,13 @@ class TestSearchAPI extends PHPUnit_Framework_TestCase {
 
 	/**
 	 * 说明：
-	 *  facet filter，这里的用例过滤出tag=green的记录
+	 * 	这里的用例过滤出tag=green的记录
 	 * 前提：
 	 * 	存在该的索引
 	 * 判断：
 	 * 	1.	返回json索引
 	 */
-	public function testFacetFilter() {
+	public function testFacets() {
 		$method = "GET";
 		$url = "http://10.232.42.205/test/index/_search";
 		
@@ -255,5 +255,226 @@ class TestSearchAPI extends PHPUnit_Framework_TestCase {
 		}}\]}}';
 		$this->AssertRegExp($expected, $result, $result);
 	}	
+	
+	/**
+	 * 说明：
+	 *  对搜索结果的一个或多个字段进行highlight，在搜索结果中会把highlight字段独立出来显示，并默认用<em></em>标记
+	 *  为了能够做highlight，字段的实际内容是必须要拿到的。如果字段设为stored，则直接从store中获取；否则，_source会被加载
+	 *  进来，并从相关字段中抽取出所需的信息
+	 *  
+	 *  如果term_vector没有设置（设term_vector=with_postions_offsets），则使用普通的highlighter。否则，使用快速的vector highlighter。
+	 *  通常情况下，后者更加高效，不过会增大索引
+	 * 前提：
+	 * 	存在该的索引
+	 * 判断：
+	 * 	1.	返回json索引
+	 */
+	public function testHighlight() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+		    "query" : {"term":{"tag":"blue"}},
+		    "highlight" : {
+		        "fields" : {
+		            "message" : {}
+		        }
+		    }
+		}';
+			
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.30685282,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.30685282, "_source" : {
+		    "message" : "something blue",
+		    "tag" : "blue"
+		},"highlight":{"message":\["something <em>blue</em>"\]}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}
+
+	/**
+	 * 说明：
+	 *  不是用默认的标记 <em></em>，这里改为用<tag1></tag1>
+	 *  还可以使用encoder参数(default|html)来定义highlighted文本如何编码
+	 * 前提：
+	 * 	存在该的索引
+	 * 判断：
+	 * 	1.	返回json索引
+	 */
+	public function testHighlightTags() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+		    "query" : {"term":{"tag":"blue"}},
+		    "highlight" : {
+		        "pre_tags" : ["<tag1>", "<tag2>"],
+		        "post_tags" : ["</tag1>", "</tag2>"],
+		        "fields" : {
+		            "message" : {}
+		        }
+		    }
+		}';
+			
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.30685282,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.30685282, "_source" : {
+		    "message" : "something blue",
+		    "tag" : "blue"
+		},"highlight":{"message":\["something <tag1>blue</tag1>"\]}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 从字面意义上看,fragment_size是设置被高亮的分片最大字符数，number_of_fragments限制高亮片段的数量
+	 * 但是从实际试验结果看，又不完全是这样，存疑。。。
+	 */
+	public function testHighlightSettings() {
+		$this->assertFalse(true);
+	}
+	
+	/**
+	 * 说明：
+	 *  通过fields限定查询结果显示的字段，默认从_source中加载，除非指定该字段store为yes
+	 * 前提：
+	 * 	存在该的索引
+	 * 判断：
+	 * 	1.	返回json索引
+	 */
+	public function testSearchFields() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{ 
+		    "fields" : ["message"], 
+		    "query" : { 
+		        "term" : { "tag" : "green" } 
+		    } 
+		}';
+			
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.30685282,"hits":\[{"_index":"test","_type":"index","_id":"2","_score":0.30685282,"fields":{"message":"something green"}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 *  如果fields为空，则查询结果中只返回id和type
+	 * 前提：
+	 * 	存在该的索引
+	 * 判断：
+	 * 	1.	返回json索引
+	 */
+	public function testSearchFieldsEmpty() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{ 
+		    "fields" : [], 
+		    "query" : { 
+		        "term" : { "tag" : "green"} 
+		    } 
+		}';
+			
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.30685282,"hits":\[{"_index":"test","_type":"index","_id":"2","_score":0.30685282}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * partial_fields对嵌套对象进行部分抽取
+	 { 
+	    "query" : { 
+	        "match_all" : {} 
+	    }, 
+	    "partial_fields" : { 
+	        "partial1" : { 
+	            "include" : ["obj1.obj2.*", "obj1.obj4.*"], 
+	            "exclude" : "obj1.obj3.*" 
+	        } 
+	    } 
+	}
+	 */
+	public function testSearchPartialField() {
+		
+	}
+	
+	/**
+	 * 说明：
+	 *  可以在fields上应用 script脚本改变其中的值。script字段可以从实际的_source文档中抽取特定的元素。
+	 *  比如_source.obj1.obj2
+	          理解doc['my_field'].value和_source.my_field的差异非常重要：
+	          首先：使用doc关键字，会使字段对应的terms被加载到内存中（被缓存），这样执行起来更快，但是需要消耗更多的内存
+                     其次：doc[]语法仅仅对简单的字段类型有效（例如不能返回json对象），并且只针对不分词的字段，或单term字段。
+        _source会使得原文档被加载、分析，然后返回json的相关部分 。      	          
+	 * 前提：
+	 * 	存在该的索引
+	 * 判断：
+	 * 	1.	返回json索引
+	 */
+	public function testSearchScriptFields() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{ 
+		    "query" : { 
+		        "match_all" : {} 
+		    }, 
+		    "script_fields" : { 
+		        "message" : { 
+		            "script" : "doc[\'message\'].values.length" 
+		        }, 
+		        "tag" : { 
+		            "script" : "doc[\'tag\'].values.length * factor", 
+		            "params" : { 
+		                "factor"  : 4.0 
+		            } 
+		        } 
+		    } 
+		}';
+			
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":2,"max_score":1.0,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":1.0,"fields":{"message":2,"tag":4.0}},{"_index":"test","_type":"index","_id":"2","_score":1.0,"fields":{"message":2,"tag":4.0}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * perference可以设为
+	 * 1. _primary:仅仅在主分片上执行搜索
+	 * 2. _primary_first:优先主分片
+	 * 3. _local: 优先本地
+	 * 4. _only_node:xyz ：在指定node上
+	 * 5. custom value:自定的值
+	 */
+	public function testPreference() {
+		
+	}
 }
 
