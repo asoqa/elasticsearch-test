@@ -81,7 +81,7 @@ class TestSearchAPI extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		//$result = curl_exec(self::$ch);		
+		$result = curl_exec(self::$ch);		
 	}
 	
 	/**
@@ -185,7 +185,8 @@ class TestSearchAPI extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
-		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, "");
+		
 		$result = curl_exec(self::$ch);
 	
 		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":2,"max_score":0.19178301,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.19178301, "_source" : {
@@ -214,7 +215,7 @@ class TestSearchAPI extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
-		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, "");
 		$result = curl_exec(self::$ch);
 	
 		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":10,"successful":10,"failed":0},"hits":{"total":2,"max_score":0.19178301,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.19178301, "_source" : {
@@ -243,7 +244,6 @@ class TestSearchAPI extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
-		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
 		$result = curl_exec(self::$ch);
 	
 		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":46,"successful":46,"failed":0},"hits":{"total":2,"max_score":0.19178301,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.19178301, "_source" : {
@@ -476,5 +476,139 @@ class TestSearchAPI extends PHPUnit_Framework_TestCase {
 	public function testPreference() {
 		
 	}
+	
+	/**
+	 1.	Query And Fetch
+	 	eg. http://10.232.42.205:9200/test/index/_search?q=*&search_type=query_and_fetch
+	 	最简单（可能是最快）的实现方式：只需要在所有相关分片上执行query，再返回结果即可。每个分片根据size参数，返回指定数量的结果。
+	 	查询结果总数就是size*分片数量。
+	 2.	Query Then Fetch
+	 	也是在所有分片上查询，不过只返回一定数量的信息（不是文档内容）。这些返回结果进行排序、算分等等，只有相关分片才会要求实际的文档内容。
+	 	通过size指定返回结果的总数量，只有这些才是需要获取实际文档内容的。如果一份索引包含许多分片时（不是副本），这种方式非常有用。
+	 3. Dfs, Query And Fetch
+	 	和"Query And Fetch"一样，只不过在初始化请求分发的阶段，进行了分布式的词频计算来保证更加精准的打分。	
+	 4. Dfs, Query Then Fetch
+	 	和"Query Then Fetch"一样，只不过在初始化请求分发的阶段，进行了分布式的词频计算来保证更加精准的打分。	
+	 5. Count
+		一个特殊的查询类型，返回结果总数，如果可能，也会返回facets总数	 
+	 6. Scan
+	 	在大数据集上进行高效的遍历。
+	 	先用下面这个查询进行scan，其中size参数控制每次scroll文档数，scroll参数控制scroll数据存活期，以及初始化scroll进程：
+	 	curl -XGET 'localhost:9200/_search?search_type=scan&scroll=10m&size=50' -d ' 
+		{ 
+		    "query" : { 
+		        "match_all" : {} 
+		    } 
+		} 
+		这个请求不会包含实际的数据，只有total_hits统计的hits数，scroll_id保存scroll进程的标记。
+		接下来可以用如下的查询，根据scroll_id拿到实际的结果
+		curl -XGET 'localhost:9200/_search/scroll?scroll=10m' -d 'c2NhbjsxOjBLMzdpWEtqU2IyZHlmVURPeFJOZnc7MzowSzM3aVhLalNiMmR5ZlVET3hSTmZ3OzU6MEszN2lYS2pTYjJkeWZVRE94Uk5mdzsyOjBLMzdpWEtqU2IyZHlmVURPeFJOZnc7NDowSzM3aVhLalNiMmR5ZlVET3hSTmZ3Ow=='
+		
+	 * 
+	 */
+	public function testSearchType() {
+		
+	}
+	
+	/**
+	 * 在一次查询中给不同的index赋予不同的boost值
+	 eg. curl -XGET "http://10.232.42.205:9200/_search" -d '
+	 { 
+	 	"indices_boost": {"test": 1.2, "blog": 1.1},
+		"query":{ "match_all" :{}}
+	 }'
+	 */
+	public function testIndicesBoost() {
+		
+	}
+	
+	/**
+	 * 给出如何评分的详细过程
+	 */
+	public function testExplain() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+		
+		$query = '{ 
+		    "explain": true, 
+		    "query" : { 
+		        "term" : { "tag": "green" } 
+		    } 
+		}';
+			
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.30685282,"hits":\[{"_shard":3,"_node":"B5cyxUnMQC64JnNfhl16kw","_index":"test","_type":"index","_id":"2","_score":0.30685282, "_source" : {
+		    "message" : "something green",
+		    "tag" : "green"
+		},"_explanation":{"value":0.30685282,"description":"fieldWeight\(tag:green in 0\), product of:","details":\[{"value":1.0,"description":"tf\(termFreq\(tag:green\)=1\)"},{"value":0.30685282,"description":"idf\(docFreq=1, maxDocs=1\)"},{"value":1.0,"description":"fieldNorm\(field=tag, doc=0\)"}\]}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);		
+	}
+	
+	/**
+	 *加上version=true，可以返回每条索引的版本号
+	 */
+	public function testReturnVersion() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{ 
+		    "version": true, 
+		    "query" : { 
+		        "term" : { "tag" : "green" } 
+		    } 
+		}';
+			
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.30685282,"hits":\[{"_index":"test","_type":"index","_id":"2","_version":1,"_score":0.30685282, "_source" : {
+		    "message" : "something green",
+		    "tag" : "green"
+		}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 	过滤掉小雨min_score的记录。这里将低于0.1得分的记录给过滤掉。
+	 * 前提：
+	 * 	存在该的索引
+	 * 判断：
+	 * 	1.	返回json索引
+	 */
+	public function testMinScoreFilter() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{ 
+		    "min_score": 0.1, 
+		    "query" : { 
+		        "query_string" : { "query" : "something blue" } 
+		    } 
+		}';
+			
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.26191524,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.26191524, "_source" : {
+		    "message" : "something blue",
+		    "tag" : "blue"
+		}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}	
 }
 

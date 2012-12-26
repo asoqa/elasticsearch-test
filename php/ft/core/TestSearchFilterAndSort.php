@@ -90,7 +90,7 @@ class TestSearchFilterAndSort extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		$result = curl_exec(self::$ch);		
+		//$result = curl_exec(self::$ch);		
 	}
 	
 	/**
@@ -1176,6 +1176,55 @@ class TestSearchFilterAndSort extends PHPUnit_Framework_TestCase {
 		
 	}
 	
+	/**
+	 * 说明：
+	 filter可以进行命名
+	 * 前提：
+	 * 	存在该的索引
+	 * 判断：
+	 * 	1.	返回json索引
+	 */
+	public function testNamedFilter() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+			"query":
+			{
+			    "filtered" : {
+			        "query" : {
+			            "term" : { "message" : "trying" }
+			        },
+			        "filter" : {
+			            "terms" : {
+			                "user" : ["kimchy1"],
+			                "_name" : "test"
+			            }
+			        }
+			    }
+			}
+			}';
+			
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":1,"max_score":0.15342641,"hits":\[{"_index":"test","_type":"index","_id":"1","_score":0.15342641, "_source" : {
+				"user" : "kimchy1",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search1" ,
+			    "age" : 1,
+		        "location" : { 
+		            "lat" : 40.11, 
+		            "lon" : -71.31 
+		        }
+			},"matched_filters":\["test"\]}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}
+		
 	/**
 	 * 说明：
 	          这里测试用例先按postDate升序，再按age逆序，最后按score

@@ -74,7 +74,7 @@ class TestSearchFacet extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		//$result = curl_exec(self::$ch);		
+		$result = curl_exec(self::$ch);		
 	}
 	
 	/**
@@ -812,10 +812,131 @@ class TestSearchFacet extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
 		$result = curl_exec(self::$ch);
-		//$facet_pos = strpos($result, '"facets":{');
-		//$acutal_result = substr($result, $facet_pos);
-		$result = json_encode(json_decode($result)->facets);
+		$facet_pos = strpos($result, '"facets":{');
+		$acutal_result = substr($result, $facet_pos);
+		//$result = json_encode(json_decode($result)->facets);
 		$expected = '"facets":{"stat1":{"_type":"statistical","count":3,"total":14.0,"min":1.0,"max":10.0,"mean":4.666666666666667,"sum_of_squares":110.0,"variance":14.888888888888891,"std_deviation":3.8586123009300755}}}';
+		$this->assertEquals($expected, $acutal_result, $acutal_result);
+	}	
+
+	/**
+	 * 说明：
+	 	支持script的方式进行统计，这里的脚本将age字段的值和obj.count值相加后的结果进行统计。
+	 	也支持参数。
+	 * 前提：
+	 * 	存在该的索引
+	 * 判断：
+	 * 	1.	返回json索引，这里改变了断言的方式，只断言facet部分json字符串
+	 */
+	public function testStatisticalScriptFacets() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{ 
+		    "query" : { 
+		        "match_all" : {} 
+		    }, 
+		    "facets" : { 
+		        "stat1" : { 
+		            "statistical" : { 
+		                "script" : "doc[\'age\'].value + doc[\'obj.count\'].value" 
+		            } 
+		        } 
+		    } 
+		} ';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		$facet_pos = strpos($result, '"facets":{');
+		$acutal_result = substr($result, $facet_pos);
+		//$result = json_encode(json_decode($result)->facets);
+		$expected = '"facets":{"stat1":{"_type":"statistical","count":3,"total":30.0,"min":4.0,"max":19.0,"mean":10.0,"sum_of_squares":426.0,"variance":42.0,"std_deviation":6.48074069840786}}}';
+		$this->assertEquals($expected, $acutal_result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	   多字段统计，这里的case对age和obj.count一起进行统计
+	 也支持参数。
+	 * 前提：
+	 * 	存在该的索引
+	 * 判断：
+	 * 	1.	返回json索引，这里改变了断言的方式，只断言facet部分json字符串
+	 */
+	public function testStatisticalMultiFieldsFacets() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{ 
+		    "query" : { 
+		        "match_all" : {} 
+		    }, 
+		    "facets" : { 
+		        "stat1" : { 
+		            "statistical" : { 
+		                "fields" : ["age","obj.count"] 
+		            } 
+		        } 
+		    } 
+		}    ';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		$facet_pos = strpos($result, '"facets":{');
+		$acutal_result = substr($result, $facet_pos);
+		//$result = json_encode(json_decode($result)->facets);
+		$expected = '"facets":{"stat1":{"_type":"statistical","count":6,"total":30.0,"min":1.0,"max":10.0,"mean":5.0,"sum_of_squares":216.0,"variance":11.0,"std_deviation":3.3166247903554}}}';
+		$this->assertEquals($expected, $acutal_result, $result);
+	}	
+	
+	/**
+	 * 说明：
+		term_stats facet将terms和statistical两种facet组合在一起。按terms先聚合，在每个分类中使用statistical进行统计。
+		可以使用size参数控制数量，使用order参数进行排序（term, reverse_term, count, reverse_count, total, reverse_total, min, reverse_min, max, reverse_max, mean, reverse_mean，默认count）
+		value_field字段可以用script定制
+		
+		term_stats可以支持多key_fields，或多value_field，但不能同时多key和多value
+	 * 前提：
+	 * 	存在该的索引
+	 * 判断：
+	 * 	1.	返回json索引，这里改变了断言的方式，只断言facet部分json字符串
+	 */
+	public function testTermStatsFacets() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/_search";
+	
+		$query = '{
+		    "query" : {
+		        "match_all" : {  }
+		    },
+		    "facets" : {
+		        "tag_price_stats" : {
+		            "terms_stats" : {
+		                "key_field" : "tags",
+		                "value_field" : "age"
+		            }
+		        }
+		    }
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		$facet_pos = strpos($result, '"facets":{');
+		$acutal_result = substr($result, $facet_pos);
+		//$result = json_encode(json_decode($result)->facets);
+		$expected = '"facets":{"tag_price_stats":{"_type":"terms_stats","missing":0,"terms":[{"term":"foo","count":3,"total_count":3,"min":1.0,"max":10.0,"total":14.0,"mean":4.666666666666667},{"term":"bar","count":2,"total_count":2,"min":3.0,"max":10.0,"total":13.0,"mean":6.5},{"term":"baz","count":1,"total_count":1,"min":10.0,"max":10.0,"total":10.0,"mean":10.0}]}}}';
 		$this->assertEquals($expected, $acutal_result, $result);
 	}	
 }
