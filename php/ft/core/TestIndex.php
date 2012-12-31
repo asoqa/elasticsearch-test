@@ -15,6 +15,19 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 	
 	public static function setUpBeforeClass() {
 		parent::setUpBeforeClass();
+		
+		$method = "PUT";
+		$url = "http://10.232.42.205/test";
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		$result = curl_exec(self::$ch);
+				
+		$url = "http://10.232.42.205/test1";
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		$result = curl_exec(self::$ch);
+		
 		$method = "PUT";
 		$url = "http://10.232.42.205/test/index/_mapping";
 		
@@ -66,6 +79,10 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		
 		$result = curl_exec(self::$ch);		
 		
+		$url = "http://10.232.42.205/test1";
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		$result = curl_exec(self::$ch);
+				
 		$url = "http://10.232.42.205/test/index-child";
 		curl_setopt(self::$ch, CURLOPT_URL, $url);		
 		$result = curl_exec(self::$ch);
@@ -613,6 +630,336 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 		
 		$expected = '{"ok":true,"_index":"test","_type":"index","_id":"'. $id . '","_version":1}';
 		$this->assertEquals($expected, $result, $expected . " || " . $result);		
+	}
+	
+	/**
+	 * 说明：
+	 * 	添加索引别名。添加后通过指定别名进行索引、查询等操作，和在实际的index是完全等效的。
+	 * 前提：
+	 *  索引库必须存在
+	 * 判断：
+	 * 	1.	操作成功
+	 */	
+	public function testAddAlias() {
+		$method = "POST";
+		$id = 11;
+		$url = "http://10.232.42.205/_aliases";
+		self::$ch = curl_init($url);
+		
+		$query = '{ 
+		    "actions" : [ 
+		        { "add" : { "index" : "test", "alias" : "alias1" } } 
+		    ] 
+		}';
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"ok":true,"acknowledged":true}';
+		$this->assertEquals($expected, $result, $result);		
+	}
+	
+	/**
+	 * 说明：
+	 * 	删除索引别名
+	 * 前提：
+	 *  索引库必须存在
+	 * 判断：
+	 * 	1.	操作成功
+	 */
+	public function testRemoveAlias() {
+		$method = "POST";
+		$id = 11;
+		$url = "http://10.232.42.205/_aliases";
+		self::$ch = curl_init($url);
+	
+		$query = '{
+		    "actions" : [
+		        { "add" : { "index" : "test", "alias" : "alias1" } }
+		    ]
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+	
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"ok":true,"acknowledged":true}';
+		$this->assertEquals($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	修改索引别名，是通过先删除再添加的办法实现的
+	 * 前提：
+	 *  索引库必须存在
+	 * 判断：
+	 * 	1.	操作成功
+	 */
+	public function testUpdateAlias() {
+		$method = "POST";
+		$id = 11;
+		$url = "http://10.232.42.205/_aliases";
+		self::$ch = curl_init($url);
+	
+		$query = '{ 
+		    "actions" : [ 
+		        { "remove" : { "index" : "test", "alias" : "alias1" } }, 
+		        { "add" : { "index" : "test", "alias" : "alias2" } } 
+		    ] 
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+	
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"ok":true,"acknowledged":true}';
+		$this->assertEquals($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	多个索引库共用一个别名
+	 * 前提：
+	 *  索引库必须存在
+	 * 判断：
+	 * 	1.	操作成功
+	 */
+	public function testAliasMultiIndices() {
+		$method = "POST";
+		$id = 11;
+		$url = "http://10.232.42.205/_aliases";
+		self::$ch = curl_init($url);
+	
+		$query = '{
+		    "actions" : [
+		        { "add" : { "index" : "test", "alias" : "alias1" } },
+		        { "add" : { "index" : "test1", "alias" : "alias2" } }
+		    ]
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+	
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"ok":true,"acknowledged":true}';
+		$this->assertEquals($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	可以给别名加filter。这样的用处是，可以给同一个索引建立不同的视图。filter用Query DSL定义，可以用于
+	 * 查询、计数、删除、More Like This等等。
+	 * 前提：
+	 *  索引库必须存在
+	 * 判断：
+	 * 	1.	操作成功
+	 */
+	public function testFilteredAlias() {
+		$method = "POST";
+		$id = 11;
+		$url = "http://10.232.42.205/_aliases";
+		self::$ch = curl_init($url);
+	
+		$query = '{ 
+		    "actions" : [ 
+		        { 
+		            "add" : { 
+		                 "index" : "test", 
+		                 "alias" : "alias2", 
+		                 "filter" : { "term" : { "user" : "kimchy" } } 
+		            } 
+		        } 
+		    ] 
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+	
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"ok":true,"acknowledged":true}';
+		$this->assertEquals($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	可以在别名基础上建立路由。这样的用处是可以和filter alias结合，避免不必要的shard操作。
+	 * 前提：
+	 *  索引库必须存在
+	 * 判断：
+	 * 	1.	操作成功
+	 */
+	public function testRoutingAlias() {
+		$method = "POST";
+		$id = 11;
+		$url = "http://10.232.42.205/_aliases";
+		self::$ch = curl_init($url);
+	
+		$query = '{ 
+		    "actions" : [ 
+		        { 
+		            "add" : { 
+		                 "index" : "test", 
+		                 "alias" : "alias1", 
+		                 "routing" : "1" 
+		            } 
+		        } 
+		    ] 
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+	
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"ok":true,"acknowledged":true}';
+		$this->assertEquals($expected, $result, $result);
+	}	
+	
+	/**
+	 * 说明：
+	 * 	可以针对搜索和索引两种操作分别建立路由。其中搜索路由可以包含多个值，因为可能涉及到在多个路由（shard）上进行查询；
+	 *  索引路由只能是单值。
+	 *  如果有路由别名，但同时也通过routing参数指定了路由（如下），则两者的交集作为路由。比如下面这个查询，将使用2作为路由值.
+	 *  curl -XGET 'http://localhost:9200/alias2/_search?q=user:kimchy&routing=2,3'
+	 * 前提：
+	 *  索引库必须存在
+	 * 判断：
+	 * 	1.	操作成功
+	 */
+	public function testDifferentRoutingAlias() {
+		$method = "POST";
+		$id = 11;
+		$url = "http://10.232.42.205/_aliases";
+		self::$ch = curl_init($url);
+	
+		$query = '{ 
+		    "actions" : [ 
+		        { 
+		            "add" : { 
+		                 "index" : "test", 
+		                 "alias" : "alias2", 
+		                 "search_routing" : "1,2", 
+		                 "index_routing" : "2" 
+		            } 
+		        } 
+		    ] 
+		}';
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+	
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"ok":true,"acknowledged":true}';
+		$this->assertEquals($expected, $result, $result);
+	}	
+	
+	/**
+	 * 通过下面的语句可以查询当前别名
+	 * curl -XGET 'localhost:9200/test/_aliases' 
+		curl -XGET 'localhost:9200/test1,test2/_aliases' 
+		curl -XGET 'localhost:9200/_aliases'
+	 */
+	public function testGetAliases() {
+		
+	}
+	
+	/**
+	 通过yaml的方式创建索引
+	 $ curl -XPUT 'http://localhost:9200/twitter/' -d '
+		index :
+		    number_of_shards : 3
+		    number_of_replicas : 2
+		'
+	 */
+	public function testCreateIndexByYaml() {
+		
+	}
+	
+	/**
+	 * 可以open和close索引库。索引库被关闭后不会在集群上产生开销（除了metadata的维护），不能进行
+	 * 读写操作。
+	 */
+	public function testCloseAndOpenIndex() {
+		$method = "POST";
+		$url = "http://10.232.42.205:9200/test/_close";
+		self::$ch = curl_init($url);
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, "");
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"ok":true,"acknowledged":true}';
+		$this->assertEquals($expected, $result, $result);
+		
+		$url = "http://10.232.42.205:9200/test/_open";
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"ok":true,"acknowledged":true}';
+		$this->assertEquals($expected, $result, $result);
+	}	
+	
+	/**
+	 * 获取setting信息
+	 * $ curl -XGET 'http://localhost:9200/twitter/_settings'
+	 */
+	public function testGetSettings() {
+		
+	}
+	
+	/**
+	 * $ curl -XGET 'http://localhost:9200/twitter/tweet/_mapping'
+	 * 可以指定多个索引库，以逗号分隔
+	 */
+	public function testGetMapping() {
+		
+	}
+	
+	/**
+	 * optimize通过合并segments从而减少segment数量，来达到优化索引、提高查询速度的目的
+	 * $ curl -XPOST 'http://localhost:9200/twitter/_optimize'
+	 */
+	public function testOptimizeIndices() {
+		
+	}
+	
+	/**
+	 * index的flush过程将内存数据写入存储
+	 * $ curl -XPOST 'http://localhost:9200/twitter/_flush'
+	 */
+	public function testFlushIndices() {
+		
 	}
 }
 

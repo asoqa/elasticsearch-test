@@ -76,15 +76,15 @@ class TestSearchQuery extends PHPUnit_Framework_TestCase {
 		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
 		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
 		
-		//$result = curl_exec(self::$ch);		
+		$result = curl_exec(self::$ch);		
 		
 		$url = "http://10.232.42.205/test/index-child";
 		curl_setopt(self::$ch, CURLOPT_URL, $url);		
-		//$result = curl_exec(self::$ch);
+		$result = curl_exec(self::$ch);
 		
 		$url = "http://10.232.42.205/test/index-nested";
 		curl_setopt(self::$ch, CURLOPT_URL, $url);
-		//$result = curl_exec(self::$ch);		
+		$result = curl_exec(self::$ch);		
 	}
 	
 	/**
@@ -800,7 +800,7 @@ class TestSearchQuery extends PHPUnit_Framework_TestCase {
 	
 	/**
 	 * 说明：
-	 * 	more like this查询空可以在多个字段中查找相似记录，可以缩写成mlt。支持参数：
+	 * 	more like this查询可以在多个字段中查找相似记录，可以缩写成mlt。支持参数：
 	    fields:
 	    like_text:
 	    percent_terms_to_match:
@@ -854,7 +854,7 @@ class TestSearchQuery extends PHPUnit_Framework_TestCase {
 	/**
 	 * 说明：
 	 * 	和more like this一样，不过是针对单个字段。语法近似于DSL。可以缩写成mlt_field
-	 * 前提：
+	 * 前提：e
 	 * 	建立索引
 	 * 判断：
 	 * 	1.返回所有匹配记录
@@ -892,6 +892,40 @@ class TestSearchQuery extends PHPUnit_Framework_TestCase {
 		$this->AssertRegExp($expected, $result, $result);
 	}	
 	
+	/**
+	 * 说明：
+	 	用url的形式进行more like this查询，不过必须与指定id的文档进行more like this的查询。这里在message字段查询与id=1类似的并且like_text为search3的记录。
+	 	为了便于对比，这里限制搜索2条记录。返回的两条结果按相似度排序，其中第3条记录最接近 ，排在第一条。
+	 	
+	 	支持参数：search_type, search_indices, search_types, search_scroll, search_size, search_from
+	 * 前提：
+	 * 	建立索引
+	 * 判断：
+	 * 	1.返回所有匹配记录
+	 */
+	public function testMoreLikeThisQueryByURI() {
+		$method = "GET";
+		$url = "http://10.232.42.205/test/index/1/_mlt?mlt_fields=message&max_query_terms=12&min_term_freq=1&min_doc_freq=1&like_text=search3&search_size=2";
+	
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, "");
+		$result = curl_exec(self::$ch);
+	
+		$expected = '{"took":[\d]{1,2},"timed_out":false,"_shards":{"total":5,"successful":5,"failed":0},"hits":{"total":9,"max_score":0.6168854,"hits":\[{"_index":"test","_type":"index","_id":"3","_score":0.6168854, "_source" : {
+				"user" : "kimchy3",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search3" 
+			}},{"_index":"test","_type":"index","_id":"8","_score":0.6168854, "_source" : {
+				"user" : "kimchy8",
+ 				"postDate" : "2009-11-15T14:12:12",						
+			    "message" : "trying out Elastic Search8" 
+			}}\]}}';
+		$this->AssertRegExp($expected, $result, $result);
+	}
+		
 	/**
 	 * 说明：
 	 * 	前缀匹配（不进行分词），等同于Lucene的PrefixQuery。可以加boost

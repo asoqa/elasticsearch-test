@@ -188,5 +188,27 @@ class TestDelete extends PHPUnit_Framework_TestCase {
 	public function testDeleteParentChild() {
 		
 	}
+	
+	public function testDeleteByQuery() {
+		$method = "DELETE";
+		$url = "http://10.232.42.205/test/index/_query";
+		
+		$query = '{ 
+		    "term" : { "message" : "trying out Elastic Search" } 
+		}';
+    		
+		self::$ch = curl_init($url);
+		
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		
+		$result = curl_exec(self::$ch);
+		
+		$expected = '{"ok":true,"_indices":{"test":{"_shards":{"total":5,"successful":5,"failed":0}}}}';
+		$this->assertEquals($expected, $result, $expected . " || " . $result);		
+	}
 }
 

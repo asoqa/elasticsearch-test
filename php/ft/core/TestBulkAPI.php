@@ -160,5 +160,58 @@ class TestBulkAPI extends PHPUnit_Framework_TestCase {
 	public function testBulkUDP() {
 		
 	}
+	
+	/**
+	 * 这里是在批量索引时，推荐的过程：
+	 * 首先：在bulk indexing之前，关闭自动refresh；另一个优化是关闭备份
+	 * 第二：启用bulk index
+	 * 第三：当bulk index完成时，恢复refresh的默认设置
+	 * 第四：对建完的索引进行优化
+	 */
+	public function testTypicalBulkIndexProcess() {
+		//1.取消refresh
+		$method = "PUT";
+		$url = "http://10.232.42.205/test/_settings";
+		$query = '{
+		    "index" : {
+		        "refresh_interval" : "-1"
+		    }
+		}';
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		$expected = '{"ok":true}';
+		$this->assertEquals($expected, $result, $result);	
+
+		//2.进行bulk index
+		// do bulk index
+		
+		//3.恢复refresh_interval
+		$method = "PUT";
+		$query = '{
+		    "index" : {
+		        "refresh_interval" : "1s"
+		    }
+		}';		
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, $query);
+		$result = curl_exec(self::$ch);
+		$expected = '{"ok":true}';
+		$this->assertEquals($expected, $result, $result);
+
+		//4.进行优化
+		$method = "POST";
+		$url = "http://10.232.42.205/test/_optimize?max_num_segments=5";
+		curl_setopt(self::$ch, CURLOPT_URL, $url);
+		curl_setopt(self::$ch, CURLOPT_PORT, 9200);
+		curl_setopt(self::$ch, CURLOPT_RETURNTRANSFER, 1);
+		curl_setopt(self::$ch, CURLOPT_CUSTOMREQUEST, strtoupper($method));
+		curl_setopt(self::$ch, CURLOPT_POSTFIELDS, "");
+		$result = curl_exec(self::$ch);
+		$expected = '{"ok":true,"_shards":{"total":10,"successful":10,"failed":0}}';
+		$this->assertEquals($expected, $result, $result);		
+	}
 }
 
