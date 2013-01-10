@@ -939,6 +939,21 @@ class TestIndex extends PHPUnit_Framework_TestCase {
 	}
 	
 	/**
+	 * 通过put方式更新settings
+	 curl -XPUT 'localhost:9200/my_index/_settings' -d '
+	{
+	    "index" : {
+	        "number_of_replicas" : 4
+	    }
+	}
+	'
+	具体支持的配置参见http://www.elasticsearch.org/guide/reference/api/admin-indices-update-settings.html
+	 */
+	public function testUpdateSettings() {
+		
+	}
+	
+	/**
 	 * $ curl -XGET 'http://localhost:9200/twitter/tweet/_mapping'
 	 * 可以指定多个索引库，以逗号分隔
 	 */
